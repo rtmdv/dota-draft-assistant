@@ -1,6 +1,9 @@
 # default hero data file
 hero_data.json
 
+# pytype
+.pytype/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
