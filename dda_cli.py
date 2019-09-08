@@ -50,7 +50,7 @@ class Hero:
             'works_well_with': self.works_well_with,
         }
 
-    def pretty_print(self):
+    def pretty_print(self) -> str:
         """Return human readable string representation of hero info."""
         return ('Name: ' + self.name + '\n'
                 'Aliases: ' + ', '.join(self.aliases) + '\n'
@@ -65,6 +65,7 @@ class DraftEngine:
     _hero_data: Dict[str, Hero]
     _hero_alias_map: Dict[str, str]
     _hero_weights: Dict[str, int]
+    _bans: List[str]
     _ally_picks: List[str]
     _enemy_picks: List[str]
     _max_picks: int = 5
@@ -95,6 +96,7 @@ class DraftEngine:
 
     def reset(self):
         """Reset engine, clearing picks and resetting hero weights to 0."""
+        self._bans = []
         self._ally_picks = []
         self._enemy_picks = []
         self._hero_weights = {}
@@ -122,11 +124,13 @@ class DraftEngine:
         if not hero_name:
             return f'No hero name or alias found matching: {hero_pick}', False
 
-        if hero_name in self._ally_picks or hero_name in self._enemy_picks:
-            return f'Hero {hero_name} already picked', False
-
         if len(self._ally_picks) >= self._max_picks:
             return 'Max ally hero picks reached', False
+
+        if hero_name in self._bans:
+            return f'Hero {hero_name} banned', False
+        if hero_name in self._ally_picks or hero_name in self._enemy_picks:
+            return f'Hero {hero_name} already picked', False
 
         # passed validation, process pick
         self._ally_picks.append(hero_name)
@@ -152,11 +156,13 @@ class DraftEngine:
         if not hero_name:
             return f'No hero name or alias found matching {hero_pick}', False
 
-        if hero_name in self._ally_picks or hero_name in self._enemy_picks:
-            return f'Hero {hero_name} already picked', False
-
         if len(self._enemy_picks) >= self._max_picks:
             return 'Max enemy hero picks reached', False
+
+        if hero_name in self._bans:
+            return f'Hero {hero_name} banned', False
+        if hero_name in self._ally_picks or hero_name in self._enemy_picks:
+            return f'Hero {hero_name} already picked', False
 
         # passed validation, process pick
         self._enemy_picks.append(hero_name)
@@ -177,7 +183,30 @@ class DraftEngine:
 
         return f'Enemy hero pick: {hero_name}, hero weights updated', True
 
-    def hero_info(self, hero: str):
+    def ban_hero(self, hero: str) -> Tuple[str, bool]:
+        """Ban hero, removing it from pool."""
+        if not hero:
+            return 'Hero argument required', False
+
+        hero_name = self.resolve_hero_name(hero)
+        if not hero_name:
+            return f'No hero name or alias found matching {hero}', False
+
+        if hero_name in self._bans:
+            return f'Hero {hero_name} already banned', False
+        if hero_name in self._ally_picks or hero_name in self._enemy_picks:
+            return f'Hero {hero_name} already picked', False
+
+        # passed validation, process pick
+        self._bans.append(hero_name)
+
+        # remove picked hero from weights pool
+        if hero_name in self._hero_weights:
+            del self._hero_weights[hero_name]
+
+        return f'Hero banned: {hero_name}, hero weights updated', True
+
+    def hero_info(self, hero: str) -> Tuple[str, bool]:
         """Get and return pretty printed hero information."""
         # check existence
         if not hero:
@@ -196,12 +225,17 @@ class DraftEngine:
         return sorted_weights[::-1]
 
     @property
-    def ally_picks(self):
+    def bans(self) -> List[str]:
+        """Return list of banned heroes."""
+        return self._bans
+
+    @property
+    def ally_picks(self) -> List[str]:
         """Return list of ally picks."""
         return self._ally_picks
 
     @property
-    def enemy_picks(self):
+    def enemy_picks(self) -> List[str]:
         """Return list of enemy picks."""
         return self._enemy_picks
 
@@ -215,6 +249,7 @@ class DraftCLI:
     def __init__(self, hero_data):
         self._draft_engine = DraftEngine(hero_data)
         print('Draft engine initialized')
+        self._help()
 
     def _prompt(self):
         """Prompt for user input and process command.
@@ -224,7 +259,7 @@ class DraftCLI:
         cmd = input(self._prompt_str)
         return self._process_command(cmd)
 
-    def _process_command(self, cmd: str):
+    def _process_command(self, cmd: str) -> bool:
         """Process command from prompt.
 
         Returns boolean for whether to continue prompting or exit.
@@ -259,6 +294,9 @@ class DraftCLI:
             print(out)
             if success:
                 self._display_hero_weights()
+        elif cmd_base in ('b', 'ban'):
+            out, success = self._draft_engine.ban_hero(cmd_params)
+            print(out)
         elif cmd_base in ('i', 'info'):
             out, success = self._draft_engine.hero_info(cmd_params)
             print(out)
@@ -276,6 +314,7 @@ class DraftCLI:
         q, quit                   quit program
         r, reset                  reset picks and weights
         s, status                 show status of picks and weights
+        b <hero>, ban <hero>      ban hero from pool
         a <hero>, ally <hero>     ally hero pick
         e <hero>, enemy <hero>    enemy hero pick
         i <hero>, info <hero>     show hero info""")
@@ -293,6 +332,7 @@ class DraftCLI:
         assert num_heroes >= num_worst
 
         print('Status:')
+        print('Bans: ' + ', '.join(self._draft_engine.bans))
         print('Enemy picks: ' + ', '.join(self._draft_engine.enemy_picks))
         print('Ally picks: ' + ', '.join(self._draft_engine.ally_picks))
 
